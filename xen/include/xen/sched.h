@@ -402,7 +402,8 @@ struct domain
     unsigned int     tot_pages;
 
     unsigned int     xenheap_pages;     /* pages allocated from Xen heap */
-    unsigned int     outstanding_pages; /* pages claimed but not possessed */
+    /* Pages claimed but not possessed, protected by global heap_lock. */
+    unsigned int     outstanding_pages;
     unsigned int     max_pages;         /* maximum value for domain_tot_pages() */
     unsigned int     extra_pages;       /* pages not included in domain_tot_pages() */
 
@@ -661,6 +662,11 @@ struct domain
         /* Permission to take ownership of the physical console input. */
         bool input_allowed;
     } console;
+
+    /* Pointer to allocated domheap page that possibly needs scrubbing. */
+    struct page_info *pending_scrub;
+    unsigned int pending_scrub_order;
+    unsigned int pending_scrub_index;
 } __aligned(PAGE_SIZE);
 
 static inline struct page_list_head *page_to_list(

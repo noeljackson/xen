@@ -40,6 +40,7 @@ struct sym_entry {
 	unsigned long long addr;
 	unsigned long size;
 	unsigned int len;
+	unsigned int orig_idx;
 	unsigned char *sym;
 	char *orig_symbol;
 	unsigned int addr_idx;
@@ -164,6 +165,10 @@ static int read_symbol(FILE *in, struct sym_entry *s)
 	else if (str[0] == '$')
 		goto skip_tail;
 
+	/* We want fake "end" symbols only for text / code. */
+	if (toupper((uint8_t)stype) != 'T')
+		s->size = 0;
+
 	/* include the type field in the symbol name, so that it gets
 	 * compressed together */
 	s->len = strlen(str) + 1;
@@ -247,6 +252,9 @@ static void read_map(FILE *in)
 				exit (1);
 			}
 		}
+
+		table[table_cnt].orig_idx = table_cnt;
+
 		if (read_symbol(in, &table[table_cnt]) == 0)
 			table_cnt++;
 	}
@@ -312,7 +320,6 @@ static int compare_name_orig(const void *p1, const void *p2)
 static bool want_symbol_end(unsigned int idx)
 {
 	return table[idx].size &&
-	       toupper(table[idx].type) == 'T' &&
 	       (idx + 1 == table_cnt ||
 	        table[idx].addr + table[idx].size < table[idx + 1].addr);
 }
@@ -639,7 +646,11 @@ static int compare_value(const void *p1, const void *p2)
 		return -1;
 	if (isupper(*sym2->sym))
 		return +1;
-	return 0;
+
+	/* Explicitly request "keep original order" otherwise. */
+	if (sym1->orig_idx < sym2->orig_idx)
+		return -1;
+	return sym1->orig_idx > sym2->orig_idx;
 }
 
 static int compare_name(const void *p1, const void *p2)
@@ -675,7 +686,10 @@ int main(int argc, char **argv)
 				warn_dup = true;
 			else if (strcmp(argv[i], "--error-dup") == 0)
 				warn_dup = error_dup = true;
-			else if (strcmp(argv[i], "--xensyms") == 0)
+			else if (strcmp(argv[i], "--empty") == 0) {
+				write_src();
+				return 0;
+			} else if (strcmp(argv[i], "--xensyms") == 0)
 				map_only = true;
 			else
 				usage();
